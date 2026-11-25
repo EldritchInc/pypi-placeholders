@@ -1,0 +1,34 @@
+# The repository's own settings: the tools that check both placeholders.
+# Each placeholder is built from its own directory, from its own
+# pyproject.toml.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["azathoth-team/src", "eldritch-licensing/src", "."]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+pretty = true
+mypy_path = ["azathoth-team/src", "eldritch-licensing/src"]
+explicit_package_bases = true
