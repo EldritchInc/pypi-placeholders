@@ -1,0 +1,90 @@
+name: Release eldritch-licensing
+
+# A tag eldritch-licensing-v<version> publishes the eldritch-licensing placeholder, and nothing
+# else, to PyPI. PyPI trusts this file, in the pypi environment, to publish
+# eldritch-licensing alone; no token is kept anywhere.
+on:
+  push:
+    tags:
+      - "eldritch-licensing-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check the eldritch-licensing placeholder
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Require the tag to name the declared version
+        run: |
+          version="$(python -c "import tomllib; print(tomllib.load(open('eldritch-licensing/pyproject.toml', 'rb'))['project']['version'])")"
+          if [ "${GITHUB_REF_NAME}" != "eldritch-licensing-v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not name eldritch-licensing ${version}." >&2
+            exit 1
+          fi
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+
+      - name: Install the placeholders and the tools
+        run: make install
+
+      - name: Test
+        run: python -m pytest
+
+      - name: Build the wheel alone
+        run: |
+          python -m build --wheel --outdir dist eldritch-licensing
+          test "$(ls dist)" = "eldritch_licensing-${VERSION}-py3-none-any.whl"
+
+      - name: Install the wheel alone and run it
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv release-check
+          "${RUNNER_TEMP}/release-check/bin/python" -m pip install "${GITHUB_WORKSPACE}"/dist/*.whl
+          status=0
+          output="$("${RUNNER_TEMP}/release-check/bin/eldritch-licensing")" || status=$?
+          test "${status}" -eq 1
+          test "${output%%$'\n'*}" = "eldritch-licensing is not distributed on PyPI."
+          if "${RUNNER_TEMP}/release-check/bin/python" -c "import eldritch_licensing"; then
+            echo "Importing eldritch_licensing did not fail." >&2
+            exit 1
+          fi
+
+      - name: Upload the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/eldritch-licensing
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
